@@ -4,20 +4,8 @@ import minescript
 from minescript import *
 import threading
 
-stop_farming = False
-
-def listen_for_exit():
-    global stop_farming
-    try:
-        import keyboard
-        while not stop_farming:
-            if keyboard.is_pressed('o'):
-                stop_farming = True
-                minescript.echo("Exit key pressed - stopping")
-                break
-            time.sleep(0.1)
-    except ImportError:
-        minescript.echo("keyboard module not available - no exit key")
+running = False
+stop_event = threading.Event()
 
 def straight_farm():
          for i in range(0,16):
@@ -61,13 +49,26 @@ def farming_chunk():
 
 
 
-# Start exit key listener in background
-listener_thread = threading.Thread(target=listen_for_exit, daemon=True)
-listener_thread.start()
+def farming():
+    global running
+    while not stop_event.is_set():
+        farming_chunk()
+        minescript.echo("Chunk farmed")
+        time.sleep(10)
+    running = False
 
-while not stop_farming:
-    farming_chunk()
-    minescript.echo("Chunk farmed")
-    time.sleep(10)
-
-minescript.echo("Farming stopped")
+with EventQueue() as event_queue:
+    event_queue.register_key_listener()
+    minescript.echo("F6 start / F7 stop")
+    while True:
+        event = event_queue.get()
+        if event.type == EventType.KEY:
+            if event.key == 295 and event.action == 1 and not running:  # F6 start
+                minescript.echo("Starting farming...")
+                stop_event.clear()
+                running = True
+                threading.Thread(target=farming, daemon=True).start()
+            elif event.key == 296 and event.action == 1 and running:  # F7 stop
+                minescript.echo("Stopping farming...")
+                stop_event.set()
+                running = False
